@@ -11,16 +11,16 @@ var Chess = (function (win) {
             black: 0b11
         },
         
-        FIELDS = {
-            A1: 0, A2: 1, A3: 2, A4: 3, A5: 4, A6: 5, A7: 6, A8: 7,
-            B1: 8, B2: 9, B3: 10, B4: 11, B5: 12, B6: 13, B7: 14, B8: 15,
-            C1: 16, C2: 17, C3: 18, C4: 19, C5: 20, C6: 21, C7: 22, C8: 23,
-            D1: 24, D2: 25, D3: 26, D4: 27, D5: 28, D6: 29, D7: 30, D8: 31,
-            E1: 32, E2: 33, E3: 34, E4: 35, E5: 36, E6: 37, E7: 38, E8: 39,
-            F1: 40, F2: 41, F3: 42, F4: 43, F5: 44, F6: 45, F7: 46, F8: 47,
-            G1: 48, G2: 49, G3: 50, G4: 51, G5: 52, G6: 53, G7: 54, G8: 55,
-            H1: 56, H2: 57, H3: 58, H4: 59, H5: 60, H6: 61, H7: 62, H8: 63
-        },
+        FIELDS = [
+            'A8', 'B8', 'C8', 'D8', 'E8', 'F8', 'G8', 'H8',
+            'A7', 'B7', 'C7', 'D7', 'E7', 'F7', 'G7', 'H7',
+            'A6', 'B6', 'C6', 'D6', 'E6', 'F6', 'G6', 'H6',
+            'A5', 'B5', 'C5', 'D5', 'E5', 'F5', 'G5', 'H5',
+            'A4', 'B4', 'C4', 'D4', 'E4', 'F4', 'G4', 'H4',
+            'A3', 'B3', 'C3', 'D3', 'E3', 'F3', 'G3', 'H3',
+            'A2', 'B2', 'C2', 'D2', 'E2', 'F2', 'G2', 'H2',
+            'A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'H1'
+        ],
         
         PIECES = {
             king: 0b00100,
@@ -42,8 +42,6 @@ var Chess = (function (win) {
             draw: 0b110000000
         },
 
-        
-
         REVERSE = {
             field: revertHash(FIELD),
             fields: revertHash(FIELDS),
@@ -63,33 +61,75 @@ var Chess = (function (win) {
         
         strategy = {
             [PIECES.king]: function (fieldFrom, fieldTo) {},
-            [PIECES.queen]: (function (fieldFrom, fieldTo) {
-                var possible = [-1, -7, -8, -9, +1, +7, +8, +9];
-
-                function checkPossibleDirection(from, to, dir) {
+            [PIECES.queen]: (function (fieldFrom, fieldTo, hash) {
+//                var possible = [-1, -7, -8, -9, +1, +7, +8, +9];
+                var possible = [ -7, -8, -9, +7, +8, +9];
+//                var possible = [-1, -7, -8, -9, +1, +7, +8, +9];
+                function getPossibleDir(from, to, dir, hash) {
+                    var list = [];
+                    
                     while(this.isExistsField(from+=dir)) {
-
-                        if(tmp === to) {
-                            return true;
+                        if(from === to) {
+                            return list;
                         }
-
-                        if(!tmp.isEmptyField(from)) {
-                            return false;
+                        
+                        if(!this.isEmptyField(from) ) {
+                            if(!this.hasFieldColor(from, hash.color)) {
+                                list.push(from)
+                            }
+                            return list;
                         }
+                        
+                        list.push(from);
                     }
 
-                    return false;
+                    return list;
                 }
 
-                return function (fieldFrom, fieldTo) {
-                    var from = this.getFieldIndex(fieldFrom),
-                        to = this.getFieldIndex(fieldTo);
+                return function (fieldFrom, fieldTo, hash) {
+                    var to = this.getFieldIndex(fieldTo),
+                        list = [];
+                        
+                    if(this.hasField(to, {color: hash.color}) || this.hasField(to, {piece: PIECES.king})) {
+                        return false;
+                    }
 
-                        return possible.some(function(item) {
-                            return checkPossibleDirection(from, to, item);
-                        }, this);
+                    possible.forEach(function(item) {
+                        list = list.concat(getPossibleDir.apply(this, [this.getFieldIndex(fieldFrom), to, item, hash]));
+                    }, this);
+                    
+                    return list;
                 };
             }()),
+//            (function (fieldFrom, fieldTo) {
+//                var possible = [-1, -7, -8, -9, +1, +7, +8, +9];
+//
+//                function checkPossibleDirection(from, to, dir) {
+//                    while(this.isExistsField(from+=dir)) {
+//                        if(from === to) {
+//                            return true;
+//                        }
+//                        
+//                        if(!this.isEmptyField(from)) {
+//                            return false;
+//                        }
+//                    }
+//
+//                    return false;
+//                }
+//
+//                return function (fieldFrom, fieldTo, hash) {
+//                    var to = this.getFieldIndex(fieldTo);
+//                        
+//                    if(this.hasField(to, {color: hash.color}) || this.hasField(to, {piece: PIECES.king})) {
+//                        return false;
+//                    }
+//
+//                    return possible.some(function(item) {
+//                        return checkPossibleDirection.apply(this, [this.getFieldIndex(fieldFrom), to, item]);
+//                    }, this);
+//                };
+//            }()),
             [PIECES.rook]: function (fieldFrom, fieldTo) {},
             [PIECES.bishop]: function (fieldFrom, fieldTo) {},
             [PIECES.knight]: function (fieldFrom, fieldTo) {},
@@ -171,8 +211,6 @@ var Chess = (function (win) {
             this.fillField('D8', [PIECES.queen, COLOR.black]);
             this.fillField('E8', [PIECES.king, COLOR.black]);
             this.fillFields(['A7', 'B7', 'C7', 'D7', 'E7', 'F7', 'G7', 'H7'], [PIECES.pawn, COLOR.black]);
-            
-            this.trigger("fields:change");
         }
         
         this.init = function () {
@@ -182,7 +220,7 @@ var Chess = (function (win) {
     };
 
     Model.prototype.getFieldIndex = function (field) {
-        return (typeof field).toLowerCase() === 'number' ? field : FIELDS[field];
+        return (typeof field).toLowerCase() === 'number' ? field : FIELDS.indexOf(field);
     };
 
     Model.prototype.getField = function (field) {
@@ -213,6 +251,10 @@ var Chess = (function (win) {
         return true;
     };
 
+    Model.prototype.hasFieldColor = function (field, color) {
+        return (this.getField(field) & MASK.color) == color;
+    };
+
     Model.prototype.hasFields = function (fieldList, hash) {
         for(var i = 0, length = fieldList.length; length > i; i+=1) {
             if(!this.hasField(fieldList[i], hash)) {
@@ -240,13 +282,13 @@ var Chess = (function (win) {
     Model.prototype.clearAllFields = function () {
         this.fields.forEach(recreateFields, this);
         
-        this.trigger("fields:change");
+        this.trigger("fields:change", FIELDS);
     }
 
     Model.prototype.fillField = function (field, list) {
         var i = this.getFieldIndex(field),
             value = this.fields[i];
-    
+                        
         list.forEach(function(item) {
             value = value | item;
         }, this);
@@ -272,14 +314,25 @@ var Chess = (function (win) {
         }
     };
 
+    Model.prototype.calculatePossibleMoves = function (from, to) {
+        if(this.isEmptyField(from)) {
+            return;
+        }
+        
+        var hash = this.parseField(from),
+            list = strategy[hash.piece].apply(this, [from, to, hash]);
+        
+        this.trigger("piece:calculatePossibleMoves", list);
+    }
+
     Model.prototype.move = function (from, to) {
         if(this.isEmptyField(from)) {
             return;
         }
         
         var hash = this.parseField(from);
-                                
-        if(!strategy[hash.piece](from, to)) {
+        
+        if(!strategy[hash.piece].apply(this, [from, to, hash])) {
             return;
         }
         
@@ -290,34 +343,36 @@ var Chess = (function (win) {
     var View = (function() {
         
         var pieces = {
-               [0 | PIECES.king | COLOR.white]: '&#9812',
-               [0 | PIECES.queen | COLOR.white]: '&#9813',
-               [0 | PIECES.rook | COLOR.white]: '&#9814',
-               [0 | PIECES.bishop | COLOR.white]: '&#9815',
-               [0 | PIECES.knight | COLOR.white]: '&#9816',
-               [0 | PIECES.pawn | COLOR.white]: '&#9817',
-               [0 | PIECES.king | COLOR.black]: '&#9818',
-               [0 | PIECES.queen | COLOR.black]: '&#9819',
-               [0 | PIECES.rook | COLOR.black]: '&#9820',
-               [0 | PIECES.bishop | COLOR.black]: '&#9821',
-               [0 | PIECES.knight | COLOR.black]: '&#9822',
-               [0 | PIECES.pawn | COLOR.black]: '&#9823'
-            },
-            tpl = {
-                
-            }
+                [0 | PIECES.king | COLOR.white]: '&#9812',
+                [0 | PIECES.queen | COLOR.white]: '&#9813',
+                [0 | PIECES.rook | COLOR.white]: '&#9814',
+                [0 | PIECES.bishop | COLOR.white]: '&#9815',
+                [0 | PIECES.knight | COLOR.white]: '&#9816',
+                [0 | PIECES.pawn | COLOR.white]: '&#9817',
+                [0 | PIECES.king | COLOR.black]: '&#9818',
+                [0 | PIECES.queen | COLOR.black]: '&#9819',
+                [0 | PIECES.rook | COLOR.black]: '&#9820',
+                [0 | PIECES.bishop | COLOR.black]: '&#9821',
+                [0 | PIECES.knight | COLOR.black]: '&#9822',
+                [0 | PIECES.pawn | COLOR.black]: '&#9823'
+             };
         
         return function (el, model) {
             Base.call(this);
 
             this.el = el;
             
-            this.fields = el.querySelectorAll('td');
+            this.fields = el.querySelectorAll('tbody td.field');
 
             this.renderChessBoard = function(field) {
                 model.fields.forEach(function(item, index) {
+                    var td = this.fields[index];
+                    
+                    td.dataset.index = index;
+                    td.dataset.field = FIELDS[index];
+                    
                     if((item & MASK.field) == FIELD.black) {
-                        this.fields[index].classList.add('field-black');
+                        td.classList.add('field-black');
                     }
                 }, this);
             }
@@ -335,9 +390,9 @@ var Chess = (function (win) {
                 }, this);
             }
             
-            this.render = function() {
+            this.renderPossibleMoves = function(list) {
                 model.fields.forEach(function(item, index) {
-                    this.renderField(index);
+                    this.fields[index].classList[list.indexOf(index) !== -1 ? 'add' : 'remove']('possible-move');
                 }, this);
             }
 
@@ -345,6 +400,12 @@ var Chess = (function (win) {
                 this.renderChessBoard();
                 
                 model.init();
+                
+                model.fields.forEach(function(item, index) {
+                    this.fields[index].addEventListener('click', function(e) {
+                        model.calculatePossibleMoves(parseInt(this.dataset.index));
+                    });
+                }, this);
             }
         }
         
@@ -355,7 +416,9 @@ var Chess = (function (win) {
             view = new View(el, model);
                    
             model.on("field:change", view.renderField, view);
-            model.on("fields:change", view.render, view);
+            model.on("fields:change", view.renderFields, view);
+            model.on("piece:calculatePossibleMoves", view.renderPossibleMoves, view);
+            
         
             view.on("piece:choose", null);
             view.on("piece:move", null);
