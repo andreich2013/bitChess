@@ -78,11 +78,10 @@ var Chess = (function (win) {
 
             var getPossibleDir = {
                     king: {
-                        move: function (from, to, coords, hash, fields) {
-                            var index = calculateIndex(coords, from),
-                                value = this.fields[index];
+                        move: function (from, to, dir, hash, fields) {
+                            var value = this.fields[from+=dir];
 
-                            return value === undefined || !bit.is.empty(value) ? [] : [index];
+                            return value === undefined || !bit.is.empty(value) ? [] : [from];
                         },
                         beat: function (from, to, dir, hash, fields) {
                             return [];
@@ -103,101 +102,88 @@ var Chess = (function (win) {
                         }
                     },
                     knight: {
-                        move: function (from, to, coords, hash, fields) {
-                            var index = calculateIndex(coords, from),
-                                value = this.fields[index],
+                        move: function (from, to, dir, hash, fields) {
+                            var value = this.fields[from+=dir],
                                 bool = value === undefined || (!bit.is.empty(value) && bit.has.color(value, hash.color));
 
-                            return bool ? [] : [index];
+                            return bool ? [] : [from];
                         }
                     },
                     queen: {
-                        move: function (from, to, coords, hash, fields) {
-                            var list = [];
+                        all: {
+                            move: function (from, dir, hash, fields) {
+                                var list = [];
 
-                            from = calculateIndex(coords, from);
-
-                            while(this.fields[from] !== undefined) {
-                                if(from === to) {
-                                    return list;
-                                }
-
-                                if(!bit.is.empty(this.fields[from])) {
-                                    if(!bit.has.color(this.fields[from], hash.color)) {
-                                        list.push(from)
+                                while(this.fields[from+=dir] !== undefined) {
+                                    if(!bit.is.empty(this.fields[from])) {
+                                        if(!bit.has.color(this.fields[from], hash.color)) {
+                                            list.push(from);
+                                        }
+                                        return list;
                                     }
-                                    return list;
+
+                                    list.push(from);
                                 }
 
-                                list.push(from);
-
-                                from = calculateIndex(coords, from);
+                                return list;
                             }
+                        },
+                        to: {
+                            move: function (from, to, dir, hash, fields) {
+                                while(this.fields[from+=dir] !== undefined) {
+                                    if(!bit.is.empty(this.fields[from]) && from !== to) {
+                                        return false;
+                                    }
 
-                            return list;
+                                    if(from === to) {
+                                        return true;
+                                    }
+                                }
+
+                                return false;
+                            }
                         }
                     },
                     pawn: {
-                        move: function (from, to, coords, hash, fields) {
-                            var list = [],
-                                i = calculateIndex(coords, from),
-                                y;
+                        move: function (from, to, dir, hash, fields) {
+                            var list = [], i, y;
 
                             do {
-                                from = i;
+                                from+=dir;
 
-                                if(from === to || this.fields[from] === undefined) {
-                                    return list;
-                                }
-
-                                if(!bit.is.empty(this.fields[from])) {
+                                if(from === to || this.fields[from] === undefined || !bit.is.empty(this.fields[from])) {
                                     return list;
                                 }
 
                                 list.push(from);
 
-                                i = calculateIndex(coords, from);
-                                y = getCoordY(i);
+                                i = from+dir;
+                                y = i % 10;
                             } while(this.fields[i] !== undefined && (fields[0] <= y && fields[1] >= y));
 
                             return list;
                         },
-                        beat: function (from, to, coords, hash, fields) {
-                            var index = calculateIndex(coords, from),
-                                value = this.fields[index],
+                        beat: function (from, to, dir, hash, fields) {
+                            var value = this.fields[from+=dir],
                                 bool = value === undefined || bit.is.empty(value) || bit.has.color(value, hash.color);
 
-                            return bool ? [] : [index];
+                            return bool ? [] : [from];
                         }
                     }
                 };
 
-            function calculateIndex(coords, index) {
-                var str = index + '';
-
-                return +('' + (+str[0] + coords[0]) + (+str[1] + coords[1]));
-            }
-
-            function getCoordX(index) {
-                return +((index + '')[0]);
-            }
-
-            function getCoordY(index) {
-                return +((index + '')[1]);
-            }
-
             var possible = {};
 
-            possible[PIECES.rook] = [[-1,0], [+1,0], [0,-1], [0,+1]];
-            possible[PIECES.bishop] = [[-1,-1], [-1,+1], [+1,+1], [+1,-1]];
-            possible[PIECES.knight] = [[-2,+1], [-1,+2], [+1,+2], [+2,+1], [-1,-2], [-2,-1], [+1,-2], [+2,-1]];
+            possible[PIECES.rook] = [-1, -10, +1, +10];
+            possible[PIECES.bishop] = [-9, -11, +9, +11];
+            possible[PIECES.knight] = [-8, -12, -19, -21, +8, +12, +19, +21];
             possible[PIECES.queen] = possible[PIECES.rook].concat(possible[PIECES.bishop]);
             possible[PIECES.king] = possible[PIECES.queen];
             possible[PIECES.pawn] = { move: {}, beat: {} };
-            possible[PIECES.pawn].move[COLOR.white] = [[0, +1]];
-            possible[PIECES.pawn].move[COLOR.black] = [[0, -1]];
-            possible[PIECES.pawn].beat[COLOR.white] = [[+1, +1], [-1, +1]];
-            possible[PIECES.pawn].beat[COLOR.black] = [[+1, -1], [-1, -1]];
+            possible[PIECES.pawn].move[COLOR.white] = [+1];
+            possible[PIECES.pawn].move[COLOR.black] = [-1];
+            possible[PIECES.pawn].beat[COLOR.white] = [-9, +11];
+            possible[PIECES.pawn].beat[COLOR.black] = [+9, -11];
 
             return {
                 [PIECES.king]: function (from, to, hash) {
@@ -207,26 +193,35 @@ var Chess = (function (win) {
                         return false;
                     }
 
-                    possible[PIECES.king].forEach(function(coords) {
-                        list = list .concat(getPossibleDir.king.move.apply(this, [from, to, coords, hash]))
-                                    .concat(getPossibleDir.king.beat.apply(this, [from, to, coords, hash]))
-                                    .concat(getPossibleDir.king.castling.apply(this, [from, to, coords, hash]))
+                    possible[PIECES.king].forEach(function(dir) {
+                        list = list .concat(getPossibleDir.king.move.apply(this, [from, to, dir, hash]))
+                                    .concat(getPossibleDir.king.beat.apply(this, [from, to, dir, hash]))
+                                    .concat(getPossibleDir.king.castling.apply(this, [from, to, dir, hash]))
                     }, this);
 
                     return list;
                 },
-                [PIECES.queen]: function (from, to, hash) {
-                    var list = [];
+                [PIECES.queen]: {
+                    all: function (from, hash) {
+                        var list = [];
 
-                    if(bit.has.color(this.fields[to], hash.color)) {
-                        return false;
+                        possible[PIECES.queen].forEach(function(dir) {
+                            list = list.concat(getPossibleDir.queen.all.move.apply(this, [from, dir, hash]));
+                        }, this);
+
+                        return list;
+                    },
+                    to: function (from, to, hash) {
+                        var list = [];
+
+                        if(bit.has.color(this.fields[to], hash.color)) {
+                            return false;
+                        }
+
+                        return possible[PIECES.queen].some(function(dir) {
+                            return getPossibleDir.queen.to.move.apply(this, [from, to, dir, hash]);
+                        }, this);
                     }
-
-                    possible[PIECES.queen].forEach(function(coords) {
-                        list = list.concat(getPossibleDir.queen.move.apply(this, [from, to, coords, hash]));
-                    }, this);
-
-                    return list;
                 },
                 [PIECES.rook]: function (from, to, hash) {
                     var list = [];
@@ -235,8 +230,8 @@ var Chess = (function (win) {
                         return false;
                     }
 
-                    possible[PIECES.rook].forEach(function(coords) {
-                        list = list.concat(getPossibleDir.queen.move.apply(this, [from, to, coords, hash]));
+                    possible[PIECES.rook].forEach(function(dir) {
+                        list = list.concat(getPossibleDir.queen.move.apply(this, [from, to, dir, hash]));
                     }, this);
 
                     return list;
@@ -280,12 +275,12 @@ var Chess = (function (win) {
                             return false;
                         }
 
-                        possible[PIECES.pawn].move[hash.color].forEach(function(coords) {
-                            list = list.concat(getPossibleDir.pawn.move.apply(this, [from, to, coords, hash, field[hash.color]]));
+                        possible[PIECES.pawn].move[hash.color].forEach(function(dir) {
+                            list = list.concat(getPossibleDir.pawn.move.apply(this, [from, to, dir, hash, field[hash.color]]));
                         }, this);
 
-                        possible[PIECES.pawn].beat[hash.color].forEach(function(coords) {
-                            list = list.concat(getPossibleDir.pawn.beat.apply(this, [from, to, coords, hash, field[hash.color]]));
+                        possible[PIECES.pawn].beat[hash.color].forEach(function(dir) {
+                            list = list.concat(getPossibleDir.pawn.beat.apply(this, [from, to, dir, hash, field[hash.color]]));
                         }, this);
 
                         return list;
@@ -473,7 +468,7 @@ var Chess = (function (win) {
         }
         
         var hash = this.parseField(from),
-            list = strategy[hash.piece].apply(this, [this.getFieldIndex(from), this.getFieldIndex(to), hash]);
+            list = strategy[hash.piece].all.apply(this, [this.getFieldIndex(from), hash]);
         
         this.trigger("piece:calculatePossibleMoves", list);
     }
@@ -485,9 +480,10 @@ var Chess = (function (win) {
         
         var hash = this.parseField(from);
 
-        this.calculatePossibleMoves(this.getFieldIndex(from));
-
-        if(!strategy[hash.piece].apply(this, [this.getFieldIndex(from), this.getFieldIndex(to), hash])) {
+        //this.calculatePossibleMoves(this.getFieldIndex(from));
+var tmp = strategy[hash.piece].to.apply(this, [this.getFieldIndex(from), this.getFieldIndex(to), hash]);
+        console.log(tmp);
+        if(!tmp) {
             return;
         }
         
@@ -590,7 +586,7 @@ var Chess = (function (win) {
                 model.fields.forEach(function(item, index) {
                     this.fields[index].addEventListener('click', function(e) {
                         if(!tmp) {
-                            model.calculatePossibleMoves(parseInt(this.dataset.index, 10));
+                            //model.calculatePossibleMoves(parseInt(this.dataset.index, 10));
                             tmp = this.dataset.field;
                         } else {
                             model.move(tmp, this.dataset.field);
