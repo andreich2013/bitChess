@@ -31,7 +31,7 @@ var Chess = (function (win) {
             knight: parseInt('10100', 2),
             pawn: parseInt('11000', 2)
         },
-        
+
         COLOR = {
             white: parseInt('1000000', 2),
             black: parseInt('1100000', 2)
@@ -77,100 +77,76 @@ var Chess = (function (win) {
         strategy = (function() {
 
             var getPossibleDir = {
-                    king: {
-                        move: function (from, to, dir, hash, fields) {
-                            var value = this.fields[from+=dir];
+                [PIECES.king]: {
+                    move: function (from, dir, hash, fields) {
+                        var value = this.fields[from += dir];
 
-                            return value === undefined || !bit.is.empty(value) ? [] : [from];
-                        },
-                        beat: function (from, to, dir, hash, fields) {
-                            return [];
-
-                            var value = this.fields[to],
-                                enemyColor = hash.color === COLOR.white ? COLOR.black : COLOR.white;
-
-                            if(value === undefined || bit.is.empty(value)) {
-                                return [];
-                            }
-
-                            return this.fields.some(function (item) {
-                                return bit.has.color(item, enemyColor) && getPossibleDir[value & MASK.piece].defend(from, to, dir, hash, fields);
-                            });
-                        },
-                        castling: function () {
-                            return [];
-                        }
+                        return value === undefined || bit.has.color(value, hash.color) ? [] : [from];
                     },
-                    knight: {
-                        move: function (from, to, dir, hash, fields) {
-                            var value = this.fields[from+=dir],
-                                bool = value === undefined || (!bit.is.empty(value) && bit.has.color(value, hash.color));
+                    castling: function (from, dir, hash, fields) {
+                        return [];
+                    }
+                },
+                [PIECES.knight]: {
+                    move: function (from, dir, hash, fields) {
+                        var value = this.fields[from+=dir],
+                            bool = value === undefined || (!bit.is.empty(value) && bit.has.color(value, hash.color));
 
-                            return bool ? [] : [from];
-                        }
-                    },
-                    queen: {
-                        all: {
-                            move: function (from, dir, hash, fields) {
-                                var list = [];
+                        return bool ? [] : [from];
+                    }
+                },
+                [PIECES.queen]: {
+                    move: function (from, dir, hash, fields) {
+                        var list = [];
 
-                                while(this.fields[from+=dir] !== undefined) {
-                                    if(!bit.is.empty(this.fields[from])) {
-                                        if(!bit.has.color(this.fields[from], hash.color)) {
-                                            list.push(from);
-                                        }
-                                        return list;
-                                    }
-
+                        while(this.fields[from+=dir] !== undefined) {
+                            if(!bit.is.empty(this.fields[from])) {
+                                if(!bit.has.color(this.fields[from], hash.color)) {
                                     list.push(from);
                                 }
-
                                 return list;
                             }
-                        },
-                        to: {
-                            move: function (from, to, dir, hash, fields) {
-                                while(this.fields[from+=dir] !== undefined) {
-                                    if(!bit.is.empty(this.fields[from]) && from !== to) {
-                                        return false;
-                                    }
 
-                                    if(from === to) {
-                                        return true;
-                                    }
-                                }
-
-                                return false;
-                            }
+                            list.push(from);
                         }
-                    },
-                    pawn: {
-                        move: function (from, to, dir, hash, fields) {
-                            var list = [], i, y;
 
-                            do {
-                                from+=dir;
-
-                                if(from === to || this.fields[from] === undefined || !bit.is.empty(this.fields[from])) {
-                                    return list;
-                                }
-
-                                list.push(from);
-
-                                i = from+dir;
-                                y = i % 10;
-                            } while(this.fields[i] !== undefined && (fields[0] <= y && fields[1] >= y));
-
-                            return list;
-                        },
-                        beat: function (from, to, dir, hash, fields) {
-                            var value = this.fields[from+=dir],
-                                bool = value === undefined || bit.is.empty(value) || bit.has.color(value, hash.color);
-
-                            return bool ? [] : [from];
-                        }
+                        return list;
                     }
-                };
+                },
+                [PIECES.pawn]: {
+                    move: function (from, dir, hash, fields) {
+                        var list = [],
+                            canMoveTwice = from % 10 === fields,
+                            value = this.fields[from+=dir];
+
+                        if(value !== undefined && bit.is.empty(value)) {
+                            list.push(from);
+                        }
+
+                        if(!canMoveTwice) {
+                            return list;
+                        }
+
+                        value = this.fields[from+=dir];
+
+                        if(value !== undefined && bit.is.empty(value)) {
+                            list.push(from);
+                        }
+
+                        return list;
+                    },
+                    beat: function (from, dir, hash, fields) {
+                        var value = this.fields[from+=dir],
+                            bool = value === undefined || bit.is.empty(value) || bit.has.color(value, hash.color);
+
+                        return bool ? [] : [from];
+                    }
+                }
+            };
+
+            function getCoords(index) {
+                return [Math.floor(index), index % 10];
+            }
 
             var possible = {};
 
@@ -186,104 +162,57 @@ var Chess = (function (win) {
             possible[PIECES.pawn].beat[COLOR.black] = [+9, -11];
 
             return {
-                [PIECES.king]: function (from, to, hash) {
-                    var list = [];
+                [PIECES.king]: function (from, hash) {
+                    var self = this;
 
-                    if(bit.has.color(this.fields[to], hash.color)) {
-                        return false;
-                    }
-
-                    possible[PIECES.king].forEach(function(dir) {
-                        list = list .concat(getPossibleDir.king.move.apply(this, [from, to, dir, hash]))
-                                    .concat(getPossibleDir.king.beat.apply(this, [from, to, dir, hash]))
-                                    .concat(getPossibleDir.king.castling.apply(this, [from, to, dir, hash]))
-                    }, this);
-
-                    return list;
+                    return possible[PIECES.king].reduce(function(prev, current, index, arr) {
+                        return prev .concat(getPossibleDir[PIECES.king].move.apply(self, [from, current, hash]))
+                                    .concat(getPossibleDir[PIECES.king].castling.apply(self, [from, current, hash]));
+                    }, []);
                 },
-                [PIECES.queen]: {
-                    all: function (from, hash) {
-                        var list = [];
+                [PIECES.queen]: function (from, hash) {
+                    var self = this;
 
-                        possible[PIECES.queen].forEach(function(dir) {
-                            list = list.concat(getPossibleDir.queen.all.move.apply(this, [from, dir, hash]));
-                        }, this);
-
-                        return list;
-                    },
-                    to: function (from, to, hash) {
-                        var list = [];
-
-                        if(bit.has.color(this.fields[to], hash.color)) {
-                            return false;
-                        }
-
-                        return possible[PIECES.queen].some(function(dir) {
-                            return getPossibleDir.queen.to.move.apply(this, [from, to, dir, hash]);
-                        }, this);
-                    }
+                    return possible[PIECES.queen].reduce(function(prev, current, index, arr) {
+                        return prev.concat(getPossibleDir[PIECES.queen].move.apply(self, [from, current, hash]));
+                    }, []);
                 },
-                [PIECES.rook]: function (from, to, hash) {
-                    var list = [];
+                [PIECES.rook]: function (from, hash) {
+                    var self = this;
 
-                    if(bit.has.color(this.fields[to], hash.color)) {
-                        return false;
-                    }
-
-                    possible[PIECES.rook].forEach(function(dir) {
-                        list = list.concat(getPossibleDir.queen.move.apply(this, [from, to, dir, hash]));
-                    }, this);
-
-                    return list;
+                    return possible[PIECES.rook].reduce(function(prev, current, index, arr) {
+                        return prev.concat(getPossibleDir[PIECES.queen].move.apply(self, [from, current, hash]));
+                    }, []);
                 },
-                [PIECES.bishop]: function (from, to, hash) {
-                    var list = [];
+                [PIECES.bishop]: function (from, hash) {
+                    var self = this;
 
-                    if(bit.has.color(this.fields[to], hash.color)) {
-                        return false;
-                    }
-
-                    possible[PIECES.bishop].forEach(function(dir) {
-                        list = list.concat(getPossibleDir.queen.move.apply(this, [from, to, dir, hash]));
-                    }, this);
-
-                    return list;
+                    return possible[PIECES.bishop].reduce(function(prev, current, index, arr) {
+                        return prev.concat(getPossibleDir[PIECES.queen].move.apply(self, [from, current, hash]));
+                    }, []);
                 },
-                [PIECES.knight]: function (from, to, hash) {
-                    var list = [];
+                [PIECES.knight]: function (from, hash) {
+                    var self = this;
 
-                    if(bit.has.color(this.fields[to], hash.color)) {
-                        return false;
-                    }
-
-                    possible[PIECES.knight].forEach(function(coords) {
-                        list = list.concat(getPossibleDir.knight.move.apply(this, [from, to, coords, hash]));
-                    }, this);
-
-                    return list;
+                    return possible[PIECES.knight].reduce(function(prev, current, index, arr) {
+                        return prev.concat(getPossibleDir[PIECES.knight].move.apply(self, [from, current, hash]));
+                    }, []);
                 },
                 [PIECES.pawn]: (function () {
                     var field = {};
 
-                        field[COLOR.white] = [1, 4];
-                        field[COLOR.black] = [5, 8];
+                        field[COLOR.white] = 2;
+                        field[COLOR.black] = 7;
 
-                    return function (from, to, hash) {
-                        var list = [];
+                    return function (from, hash) {
+                        var self = this,
+                            list = possible[PIECES.pawn].move[hash.color].reduce(function(prev, current, index, arr) {
+                                return prev.concat(getPossibleDir[PIECES.pawn].move.apply(self, [from, current, hash, field[hash.color]]));
+                            }, []);
 
-                        if(bit.has.color(this.fields[to], hash.color)) {
-                            return false;
-                        }
-
-                        possible[PIECES.pawn].move[hash.color].forEach(function(dir) {
-                            list = list.concat(getPossibleDir.pawn.move.apply(this, [from, to, dir, hash, field[hash.color]]));
-                        }, this);
-
-                        possible[PIECES.pawn].beat[hash.color].forEach(function(dir) {
-                            list = list.concat(getPossibleDir.pawn.beat.apply(this, [from, to, dir, hash, field[hash.color]]));
-                        }, this);
-
-                        return list;
+                        return possible[PIECES.pawn].beat[hash.color].reduce(function(prev, current, index, arr) {
+                            return prev.concat(getPossibleDir[PIECES.pawn].beat.apply(self, [from, current, hash, field[hash.color]]));
+                        }, list);
                     };
                 }())
             };
@@ -336,6 +265,23 @@ var Chess = (function (win) {
 
         this.fields = FIELDS.map(recreateFields);
 
+        this.color = {
+            [COLOR.white]: [],
+            [COLOR.black]: []
+        };
+
+        this.state = {
+            [COLOR.white]: 0,
+            [COLOR.black]: 0
+        };
+
+        this.possible = {
+            [COLOR.white]: [],
+            [COLOR.black]: []
+        };
+
+        this.possibleFields = [];
+
         this.arrangePieces = function () {
             this.clearAllFields();
             
@@ -356,13 +302,15 @@ var Chess = (function (win) {
         
         this.init = function () {
             //this.arrangePieces();
-            this.fillField('F4', [PIECES.king, COLOR.white]);
+            this.fillField('F3', [PIECES.king, COLOR.white]);
             this.fillField('D5', [PIECES.pawn, COLOR.white]);
             this.fillField('H7', [PIECES.pawn, COLOR.black]);
             this.fillField('G8', [PIECES.bishop, COLOR.black]);
             this.fillField('D4', [PIECES.queen, COLOR.black]);
             this.fillField('A6', [PIECES.knight, COLOR.black]);
             this.fillField('H3', [PIECES.rook, COLOR.white]);
+
+            this.refreshState();
         };
         
     };
@@ -478,45 +426,57 @@ var Chess = (function (win) {
             return;
         }
         
-        var hash = this.parseField(from);
+        var hash = this.parseField(from),
+            fromIndex = this.getFieldIndex(from),
+            toIndex = this.getFieldIndex(to);
 
-        //this.calculatePossibleMoves(this.getFieldIndex(from));
-var tmp = strategy[hash.piece].to.apply(this, [this.getFieldIndex(from), this.getFieldIndex(to), hash]);
-        console.log(tmp);
-        if(!tmp) {
-            return;
+        if(bit.has.color(this.fields[toIndex], hash.color) || !strategy[hash.piece].to.apply(this, [fromIndex, toIndex, hash])) {
+            return false;
         }
         
-        this.clearFields([from, to]);
-        this.fillField(to, [hash.piece, hash.color, hash.state]);
+        this.clearFields([fromIndex, toIndex]);
+        this.fillField(toIndex, [hash.piece, hash.color, hash.state]);
     }
 
     Model.prototype.hasFieldThreatState = function (field) {
         return [STATE.check].indexOf(this.getField(field) & MASK.state) !== -1;
     }
 
-    Model.prototype.hasColorThreatState = function (color) {
-        var threat = [STATE.check];
+    Model.prototype.checkThreat = function (color, index) {
+        return this.possible[color].some(function (item) {
+            return item.indexOf(index) !== -1;
+        });
+    }
 
-        for(var i = 0, length = this.fields.length; length > i; i+=1) {
-            if(bit.has.color(this.fields[i], color)) {
-                return threat.indexOf(this.fields[i] & MASK.state) !== -1;
+    Model.prototype.refreshState = function () {
+        this.color[COLOR.white] = [];
+        this.color[COLOR.black] = [];
+        this.possible[COLOR.white] = [];
+        this.possible[COLOR.black] = [];
+
+        var king = {};
+
+        this.fields.forEach(function (item, index) {
+            if(bit.is.empty(item)) {
+                return;
             }
-        }
 
-        return false;
-    }
+            var hash = this.parseField(index);
 
-    Model.prototype.checkState = function (color) {
+            this.color[hash.color].push(index);
 
-    }
+            this.possible[hash.color][index] = strategy[hash.piece].apply(this, [index, hash]);
 
-    Model.prototype.refreshState = function (color, state) {
-        this.fields.forEach(function(item) {
-            if(bit.has.color(item, color)) {
-                this.fillField(item, [state]);
+            if(hash.piece === PIECES.king) {
+                king[hash.color] = index;
             }
         }, this);
+
+        this.state[COLOR.white] = this.checkThreat(COLOR.white, king[COLOR.white]);
+        this.state[COLOR.black] = this.checkThreat(COLOR.white, king[COLOR.white]);
+
+        console.log(this.possible);
+        console.log(this.state);
     }
 
     var View = (function() {
