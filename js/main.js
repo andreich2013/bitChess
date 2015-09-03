@@ -275,12 +275,22 @@ var Chess = (function (win) {
             [COLOR.black]: 0
         };
 
-        this.possible = {
-            [COLOR.white]: [],
-            [COLOR.black]: []
+        this.threat = {
+            [COLOR.white]: 0,
+            [COLOR.black]: 0
         };
 
-        this.possibleFields = [];
+        this.possible = {
+            color: {
+                [COLOR.white]: [],
+                [COLOR.black]: [],
+            },
+            moves: {
+                [COLOR.white]: [],
+                [COLOR.black]: [],
+            },
+            fields: []
+        };
 
         this.arrangePieces = function () {
             this.clearAllFields();
@@ -302,13 +312,14 @@ var Chess = (function (win) {
         
         this.init = function () {
             //this.arrangePieces();
-            this.fillField('F3', [PIECES.king, COLOR.white]);
+            this.fillField('F5', [PIECES.king, COLOR.white]);
+            this.fillField('E2', [PIECES.king, COLOR.black]);
             this.fillField('D5', [PIECES.pawn, COLOR.white]);
             this.fillField('H7', [PIECES.pawn, COLOR.black]);
             this.fillField('G8', [PIECES.bishop, COLOR.black]);
             this.fillField('D4', [PIECES.queen, COLOR.black]);
             this.fillField('A6', [PIECES.knight, COLOR.black]);
-            this.fillField('H3', [PIECES.rook, COLOR.white]);
+            this.fillField('H2', [PIECES.rook, COLOR.white]);
 
             this.refreshState();
         };
@@ -410,17 +421,6 @@ var Chess = (function (win) {
         }
     }
 
-    Model.prototype.calculatePossibleMoves = function (from, to) {
-        if(this.isEmptyField(from)) {
-            return;
-        }
-        
-        var hash = this.parseField(from),
-            list = strategy[hash.piece].all.apply(this, [this.getFieldIndex(from), hash]);
-        
-        this.trigger("piece:calculatePossibleMoves", list);
-    }
-
     Model.prototype.move = function (from, to) {
         if(this.isEmptyField(from)) {
             return;
@@ -430,40 +430,58 @@ var Chess = (function (win) {
             fromIndex = this.getFieldIndex(from),
             toIndex = this.getFieldIndex(to);
 
-        if(bit.has.color(this.fields[toIndex], hash.color) || !strategy[hash.piece].to.apply(this, [fromIndex, toIndex, hash])) {
+        if(!this.checkPossibility(fromIndex, toIndex, hash) || bit.has.color(this.fields[toIndex], hash.color)) {
             return false;
         }
-        
-        this.clearFields([fromIndex, toIndex]);
-        this.fillField(toIndex, [hash.piece, hash.color, hash.state]);
-    }
 
-    Model.prototype.hasFieldThreatState = function (field) {
-        return [STATE.check].indexOf(this.getField(field) & MASK.state) !== -1;
+        this.refreshState();
     }
 
     Model.prototype.checkThreat = function (color, index) {
-        return this.possible[color].some(function (item) {
-            return item.indexOf(index) !== -1;
-        });
+        return this.threat[color].indexOf(index) !== -1;
     }
 
-    Model.prototype.refreshState = function () {
-        this.color[COLOR.white] = [];
-        this.color[COLOR.black] = [];
+    Model.prototype.checkPossibility = function (from, to, hash) {
+        return this.possible[hash.color][from].indexOf(to) !== -1;
+    }
+
+    Model.prototype.computeThreat = function (color, index) {
+        var self = this,
+            enemy = color === COLOR.white ? COLOR.black : COLOR.white,
+            stable = this.fields[index],
+            threat;
+
+        this.possible.fields[index] = 0;
+
+        threat = this.color[enemy].reduce(function (prev, current, index, arr) {
+            var hash = self.parseField(current);
+
+            return prev.concat(strategy[hash.piece].apply(self, [current, hash]));
+        }, []);
+
+        this.fields[index] = stable;
+
+        return threat;
+    }
+
+    Model.prototype.refreshState = function (from, to) {
+        this.possible.color[COLOR.white] = [];
+        this.possible.color[COLOR.black] = [];
+        this.possible.fields = this.fields.slice(0);
         this.possible[COLOR.white] = [];
         this.possible[COLOR.black] = [];
 
-        var king = {};
+        var hash = this.parseField(from),
+            king = {};
 
-        this.fields.forEach(function (item, index) {
+        this.possible.fields.forEach(function (item, index) {
             if(bit.is.empty(item)) {
                 return;
             }
 
             var hash = this.parseField(index);
 
-            this.color[hash.color].push(index);
+            this.possible.color[hash.color].push(index);
 
             this.possible[hash.color][index] = strategy[hash.piece].apply(this, [index, hash]);
 
@@ -472,11 +490,17 @@ var Chess = (function (win) {
             }
         }, this);
 
-        this.state[COLOR.white] = this.checkThreat(COLOR.white, king[COLOR.white]);
-        this.state[COLOR.black] = this.checkThreat(COLOR.white, king[COLOR.white]);
+        if (!this.computeThreat(hash.color, king[hash.color])) {
+            this.color[COLOR.white] = this.possible.color[COLOR.white].slice(0);
+            this.color[COLOR.black] = this.possible.color[COLOR.black].slice(0);
+            this.moves[COLOR.white] = this.possible.moves[COLOR.white].slice(0);
+            this.moves[COLOR.black] = this.possible.moves[COLOR.black].slice(0);
+            this.threat[COLOR.white] = this.computeThreat(COLOR.white, king[COLOR.white]);
+            this.threat[COLOR.black] = this.computeThreat(COLOR.black, king[COLOR.black]);
 
-        console.log(this.possible);
-        console.log(this.state);
+            this.clearFields([from, to]);
+            this.fillField(to, [hash.piece, hash.color, hash.state]);
+        }
     }
 
     var View = (function() {
